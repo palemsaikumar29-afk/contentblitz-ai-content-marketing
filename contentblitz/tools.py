@@ -5,8 +5,8 @@ crash the pipeline. Every tool falls back and labels its result with
 ``source`` so the UI stays transparent:
 
 - Web research: Tavily (preferred) -> SerpApi (fallback) -> mock (labelled)
-- Image gen:   Pollinations.ai (free, keyless, default) -> DALL-E 3 ->
-               DALL-E 2 -> clearly-labelled placeholder
+- Image gen:   Pollinations.ai (free, keyless, default; 3 tries w/ backoff)
+               -> DALL-E 3 -> DALL-E 2 -> clearly-labelled placeholder
 
 A placeholder image is NEVER presented as a real generated image.
 """
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import random
+import time
 from urllib.parse import quote, urlencode
 
 import requests
@@ -174,6 +175,19 @@ def _pollinations_url(prompt: str, seed: int | None = None,
     return f"{POLLINATIONS_IMAGE_BASE}/{quote(prompt, safe='')}?{params}"
 
 
+def _sleep_between_attempts(seconds: float) -> None:
+    """Sleep hook kept separate so tests can observe/patch the backoff."""
+
+    time.sleep(seconds)
+
+
+# Pollinations.ai is free and keyless, but its free tier is occasionally
+# flaky (transient HTTP 500s). Retry a few times with exponential backoff
+# before falling through to the DALL-E chain or the labelled placeholder.
+POLLINATIONS_MAX_ATTEMPTS = 3
+POLLINATIONS_RETRY_BASE_DELAY = 1.0  # seconds; doubled after each failure
+
+
 def _pollinations_image_sync(prompt: str) -> dict | None:
     """Blocking Pollinations.ai call — always run in a thread.
 
@@ -196,6 +210,25 @@ def _pollinations_image_sync(prompt: str) -> dict | None:
         }
     except Exception:
         return None
+
+
+def _pollinations_image_sync_with_retry(prompt: str) -> dict | None:
+    """Pollinations.ai call with retries and exponential backoff.
+
+    Keyless: needs no secrets. Tries up to ``POLLINATIONS_MAX_ATTEMPTS``
+    times, sleeping ``POLLINATIONS_RETRY_BASE_DELAY`` seconds after the
+    first failure and doubling the wait after each subsequent failure
+    (1s, 2s by default). Returns the generated-image dict on the first
+    success, or None when every attempt fails so the caller can fall
+    through to the DALL-E chain or the labelled placeholder.
+    """
+    for attempt in range(POLLINATIONS_MAX_ATTEMPTS):
+        result = _pollinations_image_sync(prompt)
+        if result:
+            return result
+        if attempt < POLLINATIONS_MAX_ATTEMPTS - 1:
+            _sleep_between_attempts(POLLINATIONS_RETRY_BASE_DELAY * 2**attempt)
+    return None
 
 
 def _openai_image_sync(prompt: str, model: str) -> dict | None:
@@ -258,7 +291,7 @@ async def generate_image(prompt: str) -> dict:
     ``status`` in {"generated", "placeholder"}. A placeholder is explicitly
     labelled and never presented as real.
     """
-    result = await asyncio.to_thread(_pollinations_image_sync, prompt)
+    result = await asyncio.to_thread(_pollinations_image_sync_with_retry, prompt)
     if result:
         return result
     if settings.llm_available:

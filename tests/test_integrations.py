@@ -143,6 +143,7 @@ def test_generate_image_primary_success(monkeypatch):
     _patch_openai(monkeypatch, image_url="https://img.co/3.png")
     # The free Pollinations leg is down so the DALL-E path is exercised.
     monkeypatch.setattr(tools, "_pollinations_image_sync", lambda p: None)
+    monkeypatch.setattr(tools, "_sleep_between_attempts", lambda s: None)
     monkeypatch.setattr(cfg.settings, "OPENAI_API_KEY", "test-key")
     out = asyncio.run(generate_image("a robot"))
     assert out["status"] == "generated"

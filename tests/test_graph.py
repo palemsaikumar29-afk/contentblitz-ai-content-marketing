@@ -50,7 +50,16 @@ def test_combo_produces_multiple_formats():
     assert out["research"]
 
 
-def test_image_route_placeholder():
+def test_image_route_placeholder(monkeypatch):
+    """Free provider unreachable and no OpenAI key -> labelled placeholder.
+
+    Hermetic: force the Pollinations call to fail (this test must not depend
+    on whether the sandbox network happens to reach Pollinations.ai).
+    """
+    import contentblitz.tools as tools
+
+    monkeypatch.setattr(tools, "_pollinations_image_sync", lambda p: None)
+    monkeypatch.setattr(tools, "_sleep_between_attempts", lambda s: None)
     out, _ = _run_graph("generate an image for our launch banner")
     assert "image" in out["drafts"]
     img = out["drafts"]["image"]

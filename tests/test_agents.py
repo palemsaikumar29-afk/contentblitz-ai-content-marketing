@@ -114,6 +114,7 @@ def test_image_agent_offline_placeholder_never_real(monkeypatch):
 
     # Free provider down and no DALL-E key -> labelled placeholder.
     monkeypatch.setattr(tools_mod, "_pollinations_image_sync", lambda p: None)
+    monkeypatch.setattr(tools_mod, "_sleep_between_attempts", lambda s: None)
     out = asyncio.run(image_agent(BRIEF))
     assert out["kind"] == "image"
     assert out["status"] == "placeholder"
