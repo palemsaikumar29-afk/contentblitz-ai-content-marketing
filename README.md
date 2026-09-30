@@ -27,7 +27,7 @@ conversational Streamlit UI.
 | **Deep Research** | Fans out 2–3 angled sub-queries; compiles a cited research pack. Tavily → SerpApi → labelled mock. |
 | **SEO Blog Writer** | Long-form articles through the SEO engine + validation pipeline. |
 | **LinkedIn Post Writer** | Platform-native posts: hook, short lines, question CTA, hashtags. |
-| **Image Agent** | Optimizes the visual prompt (LLM art-direction polish); DALL-E 3 → DALL-E 2 → clearly labelled placeholder. |
+| **Image Agent** | Optimizes the visual prompt (LLM art-direction polish); Pollinations.ai (free, keyless) → DALL-E 3 → DALL-E 2 → clearly labelled placeholder. |
 | **Content Strategist** | Organizes research into positioning, key messages, outline, repurposing plan, distribution. |
 
 ## Architecture
@@ -87,7 +87,7 @@ persists across turns: turns, working brief, last outputs, last research.
 |---|---|---|---|
 | LLM (router, writers, strategist) | OpenAI `gpt-4o-mini` via LangChain | — | Deterministic offline templates (labelled) |
 | Web research | Tavily | SerpApi | Labelled mock pack |
-| Image generation | DALL-E 3 | DALL-E 2 | Labelled placeholder (never shown as real) |
+| Image generation | Pollinations.ai (free, keyless) | DALL-E 3 | DALL-E 2, then labelled placeholder (never shown as real) |
 
 **Rules:**
 - A missing key or failed request **never** crashes the pipeline — every
@@ -95,8 +95,9 @@ persists across turns: turns, working brief, last outputs, last research.
 - Every result carries its `source`/`provider` label; the UI shows
   `offline mode` / `demo data` / `labelled placeholder` honestly.
 - Demo citations render as `_(demo)_`; live ones as `_(live)_`.
-- A free `/v1/models` probe (`check_image_support()`) reports DALL-E
-  capability without spending credits on a test generation.
+- A free `/v1/models` probe plus a keyless default (`check_image_support()`)
+  reports image capability: Pollinations.ai is always on (no key), DALL-E
+  availability depends on the OpenAI key.
 - No secret ever appears in the UI, logs, README, or git history.
 
 ## Validation process
@@ -151,8 +152,9 @@ Offline mode costs $0 and still produces structured, scored drafts.
 
 | Service | Approx. cost | Quality | Notes |
 |---|---|---|---|
-| DALL-E 3 | ~$0.04/image (1024²) | Best | **Primary.** Good prompt adherence for marketing visuals. |
-| DALL-E 2 | ~$0.02/image | Good | **Fallback.** Cheaper, weaker composition. |
+| Pollinations.ai (Flux) | $0 (no key, no signup) | Good | **Primary.** Keyless free tier; generations are private by default. |
+| DALL-E 3 | ~$0.04/image (1024²) | Best | **Paid fallback.** Good prompt adherence for marketing visuals. |
+| DALL-E 2 | ~$0.02/image | Good | **Paid fallback.** Cheaper, weaker composition. |
 | Labelled placeholder | $0 | N/A | Honest "not generated" card with the planned prompt — better than a fake image. |
 
 ### Recommendations
@@ -161,7 +163,8 @@ Offline mode costs $0 and still produces structured, scored drafts.
   runs; outputs are templates with real structure, SEO artifacts, and
   scores.
 - **Solo marketer (recommended):** `gpt-4o-mini` + Tavily free tier +
-  DALL-E 3. Full pipeline ≈ **<$5/month** at moderate volume.
+  Pollinations image gen (free). Full pipeline ≈ **<$5/month** at moderate
+  volume, and images cost nothing.
 - **Agency / high volume:** `gpt-4o-mini` + Tavily paid + DALL-E 3.
   Expected **$20–60/month** for hundreds of runs — the research-first
   workflow is the main cost driver (2–3 searches per run).
@@ -181,7 +184,7 @@ streamlit run app.py
 
 | Variable | Purpose |
 |---|---|
-| `OPENAI_API_KEY` | LLM routing/writing + DALL-E image generation |
+| `OPENAI_API_KEY` | LLM routing/writing + DALL-E image fallback (Pollinations needs no key) |
 | `TAVILY_API_KEY` | Web research (preferred) |
 | `SERPAPI_API_KEY` | Web research fallback |
 
@@ -215,7 +218,7 @@ behavior, invariants, and known limitations.
 │   ├── agents.py           # 6 agents: router, research, blog, linkedin, image, strategist
 │   ├── graph.py            # LangGraph orchestration (router runs before + after research)
 │   ├── workflows.py        # research-first, series, iterative refinement
-│   ├── tools.py            # Tavily→SerpApi→mock, DALL-E 3→2→placeholder
+│   ├── tools.py            # Tavily→SerpApi→mock, Pollinations→DALL-E 3→2→placeholder
 │   ├── quality.py          # scoring, SEO engine, validation/enhancement pipeline
 │   ├── brand.py            # brand voices + consistency checks
 │   ├── memory.py           # conversation memory
@@ -228,8 +231,10 @@ behavior, invariants, and known limitations.
 ## Known limitations
 
 - **DALL-E not exercised against the real API here** (no key in this
-  environment) — the 3→2→placeholder chain is verified with a stubbed
-  OpenAI client. Real availability depends on the key's model access;
+  environment) — the DALL-E 3→2 legs are verified with a stubbed
+  OpenAI client. The Pollinations leg is verified against the live
+  endpoint in `test_live_integrations.py` only when run manually.
+  Real availability depends on the key's model access;
   use `check_image_support()` before promising image generation.
 - **Live LLM/research paths** verified via stubbed transports only;
   run `tests/test_live_integrations.py` with real keys for a live check.

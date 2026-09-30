@@ -33,9 +33,11 @@ exercises a different agent route end to end.
 - **Mood:** optimistic and professional
 - **Prompt:** `generate an image for the launch visual`
 - **Expected route:** Query Handler (intent=image) → Image Agent
-- **Expect (no key):** status=placeholder, explicit PLACEHOLDER note, never
-  presented as a real image. **Expect (with key):** DALL-E 3 attempt first,
-  then DALL-E 2, then placeholder.
+- **Expect (no key):** Pollinations.ai attempted (free, keyless) —
+  status=generated on success; status=placeholder with an explicit
+  PLACEHOLDER note (never presented as a real image) if it fails.
+  **Expect (with key):** Pollinations first, then DALL-E 3, then DALL-E 2,
+  then placeholder.
 
 ## 4. Strategy brief (Content Strategist)
 

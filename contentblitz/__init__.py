@@ -7,7 +7,8 @@ intelligent LangGraph Query Handler:
 - deep_research   comprehensive web research with citations
 - seo_blog        search-optimized long-form writer
 - linkedin        professional social writer
-- image           DALL-E 3 -> DALL-E 2 -> labelled placeholder
+- image           Pollinations (free/keyless) -> DALL-E 3 -> DALL-E 2
+                -> labelled placeholder
 - strategist      content strategy & repurposing plans
 """
 

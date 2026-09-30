@@ -7,7 +7,8 @@
 2. Deep Research Agent — comprehensive web research with citations.
 3. SEO Blog Writer — search-optimized long-form content.
 4. LinkedIn Post Writer — professional social content.
-5. Image Generation Agent — DALL-E 3 -> DALL-E 2 -> labelled placeholder.
+5. Image Generation Agent — Pollinations (free/keyless) -> DALL-E 3 ->
+   DALL-E 2 -> labelled placeholder.
 6. Content Strategist — organizes research into readable content plans.
 
 Each worker is an async callable taking (brief, research/context, memory)
@@ -368,11 +369,12 @@ def _offline_linkedin(brief: dict, research: dict | None) -> str:
 # 5. Image Generation Agent
 # ---------------------------------------------------------------------------
 async def image_agent(brief: dict, memory=None) -> dict:
-    """Prompt optimization + DALL-E 3 -> DALL-E 2 -> labelled placeholder."""
+    """Prompt optimization + Pollinations (free/keyless) -> DALL-E 3 ->
+    DALL-E 2 -> labelled placeholder."""
     prompt = optimize_image_prompt(brief)
     # Optional LLM polish of the visual prompt.
     polished = await _ask_llm(
-        "You are an art director. Improve this DALL-E prompt for a marketing "
+        "You are an art director. Improve this image prompt for a marketing "
         "visual: keep it under 80 words, vivid, no text in image.",
         prompt,
     )

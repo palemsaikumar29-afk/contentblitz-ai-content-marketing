@@ -27,9 +27,9 @@ How the system should behave in each mode. Verified by the pytest suite
 - **Writers:** LLM drafts → SEO engine (keywords, meta ≤160 chars, slug,
   header optimization, keyword density) → validation/enhancement pipeline
   (quality score, voice check, auto-fixes) → citations appended.
-- **Images:** DALL-E 3 → DALL-E 2 → labelled placeholder. The free
-  `/v1/models` probe (`check_image_support`) reports capability without
-  spending credits.
+- **Images:** Pollinations.ai (free, keyless) → DALL-E 3 → DALL-E 2 →
+  labelled placeholder. `check_image_support()` reports capability; the
+  keyless Pollinations leg needs no probe.
 - **Errors:** any provider exception → `None` → next fallback. The UI
   catches per-pipeline exceptions and shows a warning, never a traceback.
 

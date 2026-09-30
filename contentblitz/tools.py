@@ -5,13 +5,16 @@ crash the pipeline. Every tool falls back and labels its result with
 ``source`` so the UI stays transparent:
 
 - Web research: Tavily (preferred) -> SerpApi (fallback) -> mock (labelled)
-- Image gen:   DALL-E 3 (primary) -> DALL-E 2 -> clearly-labelled placeholder
+- Image gen:   Pollinations.ai (free, keyless, default) -> DALL-E 3 ->
+               DALL-E 2 -> clearly-labelled placeholder
 
 A placeholder image is NEVER presented as a real generated image.
 """
 from __future__ import annotations
 
 import asyncio
+import random
+from urllib.parse import quote, urlencode
 
 import requests
 
@@ -134,7 +137,7 @@ async def web_research(query: str, max_results: int | None = None) -> dict:
 # Image generation
 # ---------------------------------------------------------------------------
 def optimize_image_prompt(brief: dict) -> str:
-    """Build a detailed, style-directed DALL-E prompt from a content brief."""
+    """Build a detailed, style-directed image prompt from a content brief."""
     topic = brief.get("topic", "abstract business concept")
     audience = brief.get("audience", "professionals")
     style = brief.get("image_style", "modern flat illustration")
@@ -147,6 +150,52 @@ def optimize_image_prompt(brief: dict) -> str:
         f"negative space for text overlay, no readable text or words in the "
         f"image, high detail, professional marketing quality, 16:9."
     )
+
+
+# Free, keyless default provider — https://image.pollinations.ai/prompt/{prompt}.
+# A GET with the prompt URL-encoded in the path returns the generated image
+# bytes directly; no signup, no API key, no credit spend. ``private=true``
+# keeps generations out of the public feed. The URL carries its own seed,
+# so the same URL always returns the same image (cheap re-fetch by the UI).
+POLLINATIONS_IMAGE_BASE = "https://image.pollinations.ai/prompt"
+
+
+def _pollinations_url(prompt: str, seed: int | None = None,
+                      width: int = 1024, height: int = 1024) -> str:
+    """Build the Pollinations.ai generation URL for a prompt."""
+    seed = seed if seed is not None else random.randint(0, 999_999)
+    params = urlencode({
+        "model": "flux",
+        "width": width,
+        "height": height,
+        "seed": seed,
+        "private": "true",
+    })
+    return f"{POLLINATIONS_IMAGE_BASE}/{quote(prompt, safe='')}?{params}"
+
+
+def _pollinations_image_sync(prompt: str) -> dict | None:
+    """Blocking Pollinations.ai call — always run in a thread.
+
+    Keyless: needs no secrets. Returns None on any failure (timeout, HTTP
+    error, or a non-image response) so the caller can fall through to the
+    DALL-E chain or the labelled placeholder.
+    """
+    try:
+        url = _pollinations_url(prompt)
+        resp = requests.get(url, timeout=120)
+        if resp.status_code != 200:
+            return None
+        if not resp.headers.get("content-type", "").startswith("image/"):
+            return None
+        return {
+            "status": "generated",
+            "image_url": url,
+            "model": "pollinations/flux",
+            "prompt": prompt,
+        }
+    except Exception:
+        return None
 
 
 def _openai_image_sync(prompt: str, model: str) -> dict | None:
@@ -171,34 +220,47 @@ def _openai_image_sync(prompt: str, model: str) -> dict | None:
 
 
 def check_image_support() -> dict:
-    """Probe which image models the OpenAI key can see — free /v1/models call.
+    """Probe which image providers are available.
 
-    Lets the app report honestly what image generation is available without
-    spending credits on a test generation.
+    Pollinations.ai is free and keyless, so it is always reported as
+    available (a generation can still fail at request time, in which case
+    the chain falls through to DALL-E / the placeholder). DALL-E models
+    are probed against the OpenAI key via a free /v1/models call.
     """
+    support = {"pollinations": True}
     if not settings.OPENAI_API_KEY:
-        return {"dall-e-3": False, "dall-e-2": False, "key_present": False}
+        support.update({"dall-e-3": False, "dall-e-2": False,
+                        "key_present": False})
+        return support
     try:
         from openai import OpenAI
 
         client = OpenAI(api_key=settings.OPENAI_API_KEY)
         ids = {m.id for m in client.models.list()}
-        return {
+        support.update({
             "dall-e-3": "dall-e-3" in ids,
             "dall-e-2": "dall-e-2" in ids,
             "key_present": True,
-        }
+        })
+        return support
     except Exception:
-        return {"dall-e-3": False, "dall-e-2": False, "key_present": True,
-                "probe_error": True}
+        support.update({"dall-e-3": False, "dall-e-2": False,
+                        "key_present": True, "probe_error": True})
+        return support
 
 
 async def generate_image(prompt: str) -> dict:
-    """Generate an image with the DALL-E 3 -> DALL-E 2 -> placeholder chain.
+    """Generate an image with the Pollinations -> DALL-E 3 -> DALL-E 2 ->
+    placeholder chain.
 
-    Always returns a dict with ``status`` in {"generated", "placeholder"}.
-    A placeholder is explicitly labelled and never presented as real.
+    Pollinations.ai is the free, keyless default. DALL-E stays as the paid
+    fallback when an OpenAI key is present. Always returns a dict with
+    ``status`` in {"generated", "placeholder"}. A placeholder is explicitly
+    labelled and never presented as real.
     """
+    result = await asyncio.to_thread(_pollinations_image_sync, prompt)
+    if result:
+        return result
     if settings.llm_available:
         result = await asyncio.to_thread(
             _openai_image_sync, prompt, settings.IMAGE_MODEL_PRIMARY
@@ -218,7 +280,7 @@ async def generate_image(prompt: str) -> dict:
         "prompt": prompt,
         "note": (
             "PLACEHOLDER — image generation is unavailable "
-            "(no OpenAI key or the DALL-E call failed). "
+            "(Pollinations.ai and DALL-E calls both failed). "
             "This is not a real generated image."
         ),
     }

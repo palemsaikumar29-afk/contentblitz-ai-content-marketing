@@ -109,7 +109,11 @@ def test_linkedin_writer_applies_feedback(monkeypatch):
     assert "make it shorter" in seen["user"]
 
 
-def test_image_agent_offline_placeholder_never_real():
+def test_image_agent_offline_placeholder_never_real(monkeypatch):
+    import contentblitz.tools as tools_mod
+
+    # Free provider down and no DALL-E key -> labelled placeholder.
+    monkeypatch.setattr(tools_mod, "_pollinations_image_sync", lambda p: None)
     out = asyncio.run(image_agent(BRIEF))
     assert out["kind"] == "image"
     assert out["status"] == "placeholder"

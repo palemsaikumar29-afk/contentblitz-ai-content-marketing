@@ -1,13 +1,13 @@
 """Central configuration. All secrets come from environment variables only.
 
 Required for full functionality:
-    OPENAI_API_KEY   Chat/completion model + DALL-E image generation
+    OPENAI_API_KEY   Chat/completion model + DALL-E image fallback
 Optional (tools degrade gracefully when missing):
     TAVILY_API_KEY   Web research (preferred)
     SERPAPI_API_KEY  Web research fallback
 
-Without keys the pipeline runs in offline/demo mode: deterministic
-rule-based writers, mock research with labelled citations, and a
+Image generation uses free, keyless Pollinations.ai by default (no key
+needed). Without any providers reachable the pipeline falls back to a
 clearly-labelled image placeholder (never presented as real).
 """
 from __future__ import annotations
@@ -46,7 +46,8 @@ class Settings:
     SERPAPI_API_KEY: str = os.getenv("SERPAPI_API_KEY", "")
 
     LLM_MODEL: str = os.getenv("CONTENTBLITZ_LLM_MODEL", "gpt-4o-mini")
-    # DALL-E fallback chain: 3 -> 2 -> labelled placeholder.
+    # Image fallback chain: Pollinations (free/keyless) -> DALL-E 3 -> DALL-E 2.
+    # An OPENAI_API_KEY enables the DALL-E fallback legs only.
     IMAGE_MODEL_PRIMARY: str = os.getenv("CONTENTBLITZ_IMAGE_MODEL", "dall-e-3")
     IMAGE_MODEL_FALLBACK: str = "dall-e-2"
     RESEARCH_MAX_RESULTS: int = int(os.getenv("CONTENTBLITZ_RESEARCH_MAX", "8"))

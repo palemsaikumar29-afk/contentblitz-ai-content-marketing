@@ -3,6 +3,7 @@ import asyncio
 
 from contentblitz import tools
 from contentblitz.tools import (
+    _pollinations_image_sync,
     check_image_support,
     generate_image,
     optimize_image_prompt,
@@ -83,12 +84,69 @@ def test_optimize_image_prompt_includes_brief_fields():
     assert "no readable text" in prompt
 
 
-def test_generate_image_offline_is_labelled_placeholder():
+def test_generate_image_offline_is_labelled_placeholder(monkeypatch):
+    # Free provider down and no DALL-E key -> labelled placeholder.
+    monkeypatch.setattr(tools, "_pollinations_image_sync", lambda p: None)
     result = asyncio.run(generate_image("a robot writing"))
     assert result["status"] == "placeholder"
     assert result["image_url"] is None
     assert "PLACEHOLDER" in result["note"]
     assert "not a real generated image" in result["note"]
+
+
+def test_generate_image_pollinations_first_success(monkeypatch):
+    import contentblitz.config as cfg
+
+    def fake_get(url, timeout=None):
+        class _Resp:
+            status_code = 200
+            headers = {"content-type": "image/jpeg"}
+
+        assert url.startswith("https://image.pollinations.ai/prompt/")
+        assert "model=flux" in url
+        return _Resp()
+
+    monkeypatch.setattr(tools.requests, "get", fake_get)
+    monkeypatch.setattr(cfg.settings, "OPENAI_API_KEY", "test-key")
+    result = asyncio.run(generate_image("a robot"))
+    assert result["status"] == "generated"
+    assert result["model"] == "pollinations/flux"
+    assert result["image_url"].startswith("https://image.pollinations.ai/")
+
+
+def test_pollinations_image_sync_success(monkeypatch):
+    def fake_get(url, timeout=None):
+        class _Resp:
+            status_code = 200
+            headers = {"content-type": "image/png"}
+
+        return _Resp()
+
+    monkeypatch.setattr(tools.requests, "get", fake_get)
+    out = _pollinations_image_sync("a robot painting")
+    assert out["status"] == "generated"
+    assert out["model"] == "pollinations/flux"
+    assert "a%20robot%20painting" in out["image_url"]
+
+
+def test_pollinations_image_sync_rejects_non_image(monkeypatch):
+    def fake_get(url, timeout=None):
+        class _Resp:
+            status_code = 200
+            headers = {"content-type": "text/html"}
+
+        return _Resp()
+
+    monkeypatch.setattr(tools.requests, "get", fake_get)
+    assert _pollinations_image_sync("a robot") is None
+
+
+def test_pollinations_image_sync_request_failure(monkeypatch):
+    def boom(url, timeout=None):
+        raise RuntimeError("network down")
+
+    monkeypatch.setattr(tools.requests, "get", boom)
+    assert _pollinations_image_sync("a robot") is None
 
 
 def test_generate_image_dalle3_then_dalle2(monkeypatch):
@@ -104,6 +162,7 @@ def test_generate_image_dalle3_then_dalle2(monkeypatch):
                 "model": model, "prompt": prompt}
 
     monkeypatch.setattr(cfg.settings, "OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(tools, "_pollinations_image_sync", lambda p: None)
     monkeypatch.setattr(tools, "_openai_image_sync", fake_gen)
     result = asyncio.run(generate_image("a robot"))
     assert result["status"] == "generated"
@@ -115,6 +174,7 @@ def test_generate_image_all_fail_is_placeholder(monkeypatch):
     import contentblitz.config as cfg
 
     monkeypatch.setattr(cfg.settings, "OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(tools, "_pollinations_image_sync", lambda p: None)
     monkeypatch.setattr(tools, "_openai_image_sync", lambda p, m: None)
     result = asyncio.run(generate_image("a robot"))
     assert result["status"] == "placeholder"
@@ -125,3 +185,5 @@ def test_check_image_support_no_key():
     support = check_image_support()
     assert support["key_present"] is False
     assert support["dall-e-3"] is False
+    # Pollinations is free and keyless, so it is always available.
+    assert support["pollinations"] is True

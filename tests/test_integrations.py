@@ -141,10 +141,27 @@ def test_generate_image_primary_success(monkeypatch):
     import contentblitz.config as cfg
 
     _patch_openai(monkeypatch, image_url="https://img.co/3.png")
+    # The free Pollinations leg is down so the DALL-E path is exercised.
+    monkeypatch.setattr(tools, "_pollinations_image_sync", lambda p: None)
     monkeypatch.setattr(cfg.settings, "OPENAI_API_KEY", "test-key")
     out = asyncio.run(generate_image("a robot"))
     assert out["status"] == "generated"
     assert out["model"] == "dall-e-3"
+
+
+def test_generate_image_pollinations_first_success(monkeypatch):
+    """The free keyless provider is tried before any DALL-E call."""
+    import contentblitz.config as cfg
+
+    class _ImgResp:
+        status_code = 200
+        headers = {"content-type": "image/jpeg"}
+
+    monkeypatch.setattr(tools.requests, "get", lambda url, timeout=None: _ImgResp())
+    monkeypatch.setattr(cfg.settings, "OPENAI_API_KEY", "test-key")
+    out = asyncio.run(generate_image("a robot"))
+    assert out["status"] == "generated"
+    assert out["model"] == "pollinations/flux"
 
 
 def test_check_image_support_lists_models(monkeypatch):
@@ -154,7 +171,7 @@ def test_check_image_support_lists_models(monkeypatch):
     monkeypatch.setattr(cfg.settings, "OPENAI_API_KEY", "test-key")
     support = check_image_support()
     assert support == {"dall-e-3": True, "dall-e-2": False,
-                       "key_present": True}
+                       "key_present": True, "pollinations": True}
 
 
 def test_check_image_support_probe_error(monkeypatch):

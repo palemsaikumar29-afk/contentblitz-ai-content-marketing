@@ -7,9 +7,11 @@ Four tabs:
 - 📤 Export      download drafts as Markdown / HTML / PDF
 
 Keys via environment (all optional — the app degrades gracefully):
-    OPENAI_API_KEY   LLM writers + DALL-E image generation
+    OPENAI_API_KEY   LLM writers + DALL-E image fallback
     TAVILY_API_KEY   web research (preferred)
     SERPAPI_API_KEY  web research fallback
+
+Image generation is free via Pollinations.ai and needs no key.
 """
 from __future__ import annotations
 
@@ -95,9 +97,11 @@ with st.sidebar:
     st.write("🔍 Research:",
              "live" if settings.research_available else "demo data")
     st.write("🎨 Image gen:",
-             "DALL-E" if settings.llm_available else "labelled placeholder")
-    st.caption("Add API keys via environment variables to unlock live "
-               "LLM writing, real research, and image generation.")
+             "Pollinations (free)" + (" + DALL-E" if settings.llm_available
+                                      else ""))
+    st.caption("Image generation is free via Pollinations.ai — no key needed. "
+               "Add API keys via environment variables to unlock live "
+               "LLM writing and real research.")
     st.divider()
     st.header("Brief defaults")
     st.text_input("Topic", key="sb_topic",
@@ -220,7 +224,7 @@ with tab_dash:
                           expanded=(kind == "blog")):
             if kind == "image":
                 if res.get("status") == "generated" and res.get("image_url"):
-                    st.image(res["image_url"], caption=f"DALL-E ({res['model']})")
+                    st.image(res["image_url"], caption=f"Generated image ({res['model']})")
                 else:
                     st.warning(res.get("note", "Placeholder image."))
                     st.caption(f"Planned prompt: {res.get('prompt', '')[:400]}")
