@@ -94,7 +94,8 @@ async def refine_content(kind: str, draft: str, feedback: str,
                 "score": score_content(draft, kind)["score"]}]
     current = draft
     for _ in range(rounds):
-        out = await writer(brief, research, memory, feedback=feedback)
+        out = await writer(brief, research, memory, feedback=feedback,
+                           prior_draft=current)
         new_score = out["quality"]["score"]
         history.append({"draft": out["draft"], "score": new_score})
         if new_score <= history[-2]["score"]:

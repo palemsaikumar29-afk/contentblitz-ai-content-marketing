@@ -16,3 +16,4 @@ test_data/__pycache__/
 # Tests / OS
 .pytest_cache/
 .DS_Store
+.coverage

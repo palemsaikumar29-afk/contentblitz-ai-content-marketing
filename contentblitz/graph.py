@@ -159,21 +159,46 @@ def build_graph(memory=None):
                 "answer": "\n\n---\n\n".join(parts)}
 
     async def refine(state: BlitzState) -> BlitzState:
-        """Multi-turn iterative refinement of the last draft."""
+        """Multi-turn iterative refinement of the last draft.
+
+        Carries the REAL topic (memory.last_topic) and the actual prior
+        draft into the writer, so follow-ups like "make it punchier" or
+        "turn that into a LinkedIn post" edit the existing draft instead
+        of treating the follow-up text as a new topic.
+        """
         feedback = state.get("feedback") or state.get("user_input", "")
-        drafts = state.get("drafts") or {}
-        kind = next(reversed(drafts.keys()), None) if drafts else None
-        brief = state.get("brief") or {}
-        research = state.get("research")
+        decision = state.get("decision") or {}
+        drafts = dict(state.get("drafts") or {})
         runners = {"blog": seo_blog_writer, "linkedin": linkedin_writer,
                    "strategy": content_strategist}
-        if kind in runners:
-            result = await runners[kind](brief, research, memory,
-                                         feedback=feedback)
-            drafts = {**drafts, kind: result}
-            return {**state, "drafts": drafts,
-                    "answer": result["draft"]}
-        return {**state, "answer": "There's no draft to refine yet — ask me to write something first."}
+
+        # Resolve the prior draft: memory is the session truth, state
+        # drafts the fallback (e.g. restored UI session state).
+        target_kind = decision.get("target_kind")
+        prior_kind, prior_draft = None, None
+        if memory is not None:
+            prior_kind, prior_draft = memory.last_draft(target_kind)
+        if prior_draft is None and drafts:
+            prior_kind = (target_kind if target_kind in drafts
+                          else next(reversed(drafts.keys())))
+            prior_draft = (drafts.get(prior_kind) or {}).get("draft")
+        kind = target_kind or prior_kind
+        if not prior_draft or kind not in {**runners, "image": image_agent}:
+            return {**state, "answer": "There's no draft to refine yet — ask me to write something first."}
+
+        brief = dict(state.get("brief") or {})
+        if memory is not None and memory.last_topic:
+            # The real topic — never the follow-up text ("make it punchier").
+            brief["topic"] = memory.last_topic
+        if kind == "image":
+            result = await image_agent(brief, memory)
+        else:
+            result = await runners[kind](brief, state.get("research"), memory,
+                                         feedback=feedback,
+                                         prior_draft=prior_draft)
+        drafts = {**drafts, kind: result}
+        return {**state, "drafts": drafts, "brief": brief,
+                "answer": result["draft"]}
 
     async def series(state: BlitzState) -> BlitzState:
         """Content series generation for campaigns (via workflows)."""
